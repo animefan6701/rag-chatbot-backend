@@ -1,0 +1,34 @@
+
+
+Title: Billing FAQ (Quarterly Plans) 
+Version: 3.0 
+Last Updated: 2025-08-27 
+ 
+Summary 
+This FAQ answers common questions about quarterly billing, proration, refunds, and invoice 
+access. 
+ 
+What is a quarterly plan? 
+A quarterly plan charges every 3 months on the subscription anniversary date. 
+ 
+How does proration work if I upgrade mid-cycle? 
+We credit the unused portion of the old plan and bill immediately for the remainder of the cycle 
+at the new plan rate. 
+ 
+Refund policy 
+Refunds are evaluated case-by-case within 30 days of charge. Contact billing@example.com 
+with the invoice number. 
+ 
+Where can I download invoices? 
+Go to Account → Billing → Invoices. Click “Download PDF”. 
+ 
+Images: 
+![](https://via.placeholder.com/960x540?text=Invoice+List) 
+ 
+Tax handling 
+We apply tax based on your billing address and any valid tax IDs on file. Update your tax details 
+in Account → Billing → Tax Info. 
+ 
+Contact 
+billing@example.com 
+ 

@@ -39,18 +39,22 @@ const WORDPRESS_ADMIN_LINKS = {
 
 /**
  * Detects WordPress-related keywords in text and generates the most relevant admin link
- * @param {string} text - The text to analyze
+ * @param {string} text - The text to analyze (AI response)
  * @param {string} domain - The domain name (default from env or ${domain})
+ * @param {string} originalPrompt - The original user prompt for better context
  * @returns {string} - Formatted link string with HTML hyperlink
  */
-function generateWordPressLinks(text, domain = null) {
+function generateWordPressLinks(text, domain = null, originalPrompt = '') {
     // Use environment variable for domain, fallback to placeholder
     const siteDomain = domain || process.env.WORDPRESS_DOMAIN || '${domain}';
     const lowerText = text.toLowerCase();
+    const lowerPrompt = originalPrompt.toLowerCase();
 
     // Priority mapping - more specific keywords first with detailed descriptions
     const priorityKeywords = [
-        // Specific actions first
+        // Very specific actions first (most contextual)
+        { keywords: ['change author', 'switch author', 'author of post', 'post author', 'change post author'], linkText: 'Edit Posts', path: '/wp-admin/edit.php' },
+        { keywords: ['change page author', 'switch page author', 'author of page', 'page author'], linkText: 'Edit Pages', path: '/wp-admin/edit.php?post_type=page' },
         { keywords: ['create post', 'new post', 'add post', 'write post'], linkText: 'Create New Post', path: '/wp-admin/post-new.php' },
         { keywords: ['create page', 'new page', 'add page'], linkText: 'Create New Page', path: '/wp-admin/post-new.php?post_type=page' },
         { keywords: ['edit post', 'modify post', 'update post'], linkText: 'Edit Posts', path: '/wp-admin/edit.php' },
@@ -72,7 +76,7 @@ function generateWordPressLinks(text, domain = null) {
         { keywords: ['create tag', 'add tag'], linkText: 'Manage Tags', path: '/wp-admin/edit-tags.php?taxonomy=post_tag' },
         { keywords: ['appearance', 'theme options'], linkText: 'Appearance Settings', path: '/wp-admin/themes.php' },
         { keywords: ['editor', 'code editor', 'file editor'], linkText: 'Theme Editor', path: '/wp-admin/theme-editor.php' },
-        // General keywords last (fallback)
+        // General keywords last (fallback) - only if no specific context found
         { keywords: ['plugin'], linkText: 'Manage Plugins', path: '/wp-admin/plugins.php' },
         { keywords: ['theme'], linkText: 'Manage Themes', path: '/wp-admin/themes.php' },
         { keywords: ['post'], linkText: 'All Posts', path: '/wp-admin/edit.php' },
@@ -84,10 +88,43 @@ function generateWordPressLinks(text, domain = null) {
         { keywords: ['comment'], linkText: 'Moderate Comments', path: '/wp-admin/edit-comments.php' }
     ];
 
-    // Find the most relevant link based on priority
+    // Find the most relevant link based on priority and context
+    // First, check the original user prompt for better context matching
+    for (const item of priorityKeywords) {
+        for (const keyword of item.keywords) {
+            // Check original prompt first (more accurate for user intent)
+            if (lowerPrompt.includes(keyword)) {
+                const linkText = item.linkText;
+                const fullUrl = `${siteDomain}${item.path}`;
+                const htmlLink = `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+
+                return `\n\n**WordPress Admin Link:**\n- ${htmlLink}`;
+            }
+        }
+    }
+
+    // If no match in prompt, fall back to checking the AI response
     for (const item of priorityKeywords) {
         for (const keyword of item.keywords) {
             if (lowerText.includes(keyword)) {
+                // For better context matching, check if this is really the most relevant
+                // Skip generic keywords if we're in a very specific context
+                if (keyword.length <= 4 && item.keywords.length === 1) {
+                    // This is a generic single-word keyword, check if there's a more specific match first
+                    let hasMoreSpecificMatch = false;
+                    for (const otherItem of priorityKeywords) {
+                        if (otherItem === item) break; // Only check items before this one (higher priority)
+                        for (const otherKeyword of otherItem.keywords) {
+                            if (otherKeyword.length > 4 && (lowerText.includes(otherKeyword) || lowerPrompt.includes(otherKeyword))) {
+                                hasMoreSpecificMatch = true;
+                                break;
+                            }
+                        }
+                        if (hasMoreSpecificMatch) break;
+                    }
+                    if (hasMoreSpecificMatch) continue; // Skip this generic match
+                }
+
                 const linkText = item.linkText;
                 const fullUrl = `${siteDomain}${item.path}`;
                 const htmlLink = `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
@@ -168,7 +205,7 @@ export async function chatWithContext(prompt, contextChunks = [], images = []) {
         });
 
         const answer = choices[0].message.content;
-        const wordpressLinks = generateWordPressLinks(answer);
+        const wordpressLinks = generateWordPressLinks(answer, null, prompt);
 
         return {
             answer: answer + wordpressLinks,
@@ -235,7 +272,7 @@ ${context}`;
     });
 
     const answer = choices[0].message.content;
-    const wordpressLinks = generateWordPressLinks(answer);
+    const wordpressLinks = generateWordPressLinks(answer, null, prompt);
 
     return {
         answer: answer + wordpressLinks,

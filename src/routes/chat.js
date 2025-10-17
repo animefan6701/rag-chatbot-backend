@@ -6,6 +6,12 @@ import { embedBatch, chatWithContext } from "../embeddings.js";
 import { sb, uploadBuffer } from "../storage.js";
 import fs from 'fs/promises';
 
+import OpenAI from 'openai';
+import fsSync from 'fs';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+
 const router = Router();
 
 // Configure multer for image uploads
@@ -38,6 +44,7 @@ router.post("/", async (req, res) => {
     if (session_id === '') session_id = null;
     if (doc_id === '') doc_id = null;
     if (user_email === '') user_email = null;
+
 
     console.log("=== PARSED CHAT REQUEST ===");
     console.log("Prompt:", prompt);
@@ -98,7 +105,7 @@ router.post("/", async (req, res) => {
 
     const [embedding] = await embedBatch([prompt]);
     console.log("Embedding generated, length:", embedding.length);
-    
+
     const d = db();
     const hits = await d.searchSimilar(embedding, k, doc_id);
     console.log("Search results found:", hits.length);
@@ -106,22 +113,22 @@ router.post("/", async (req, res) => {
 
     // Check if we have relevant database results
     const hasRelevantResults = hits && hits.length > 0;
-    
+
     // Filter out low similarity results - only use results with similarity > 0.5
     const relevantHits = hits.filter(hit => hit.similarity > 0.5); // Higher threshold for better quality
     const hasHighQualityResults = relevantHits.length > 0;
-    
+
     console.log(`Search results: ${hits.length} total, ${relevantHits.length} with similarity > 0.5`);
     if (hits.length > 0) {
       console.log("Similarity scores:", hits.map(h => h.similarity?.toFixed(3)));
     }
-    
+
          if (hasRelevantResults && hasHighQualityResults) {
        console.log("✅ Found relevant database results with similarity > 0.5, using RAG approach");
-      
+
       // Get relevant images for the document
       let images = [];
-      
+
       // Extract document ID from search results if not provided
       let targetDocId = doc_id;
       if (!targetDocId && relevantHits.length > 0) {
@@ -137,11 +144,11 @@ router.post("/", async (req, res) => {
           }
         }
       }
-      
+
       if (targetDocId) {
         console.log(`\n=== FETCHING IMAGES ===`);
         console.log(`Document ID: ${targetDocId}`);
-        
+
         const { data: assets, error: assetsError } = await sb
           .from("document_assets")
           .select("id, kind, image_index, page_index, url, content_type")
@@ -174,7 +181,7 @@ router.post("/", async (req, res) => {
       console.log(`Answer length: ${answer.answer?.length || 0} characters`);
       console.log(`Sources count: ${relevantHits.length}`);
       console.log(`Images count: ${images.length}`);
-      
+
              const response = {
          ok: true,
          ...answer,
@@ -187,14 +194,14 @@ router.post("/", async (req, res) => {
          })),
          images: images,
        };
-      
+
              console.log("Response structure:", {
          ok: response.ok,
          answerLength: response.answer?.length || 0,
          sourcesCount: response.sources?.length || 0,
          imagesCount: response.images?.length || 0
        });
-       
+
        // Log document URLs for debugging
        if (response.sources && response.sources.length > 0) {
          console.log("Document URLs included:");
@@ -226,27 +233,27 @@ router.post("/", async (req, res) => {
           // Don't fail the request if history saving fails
         }
       }
-      
+
          } else {
        if (hasRelevantResults && !hasHighQualityResults) {
          console.log("⚠️ Found database results but similarity < 0.5, using direct OpenAI");
        } else {
          console.log("⚠️ No relevant database results found, using direct OpenAI");
        }
-      
+
       // Use direct OpenAI without context (now with flexible system prompt)
       console.log("📝 Using flexible system prompt for non-WordPress or low-similarity questions");
       const answer = await chatWithContext(prompt, []);
       console.log(`\n=== SENDING DIRECT OPENAI RESPONSE ===`);
       console.log(`Answer length: ${answer.answer?.length || 0} characters`);
-      
+
       const response = {
         ok: true,
         ...answer,
         sources: [], // No sources when no database results
         images: [], // No images when no database results
       };
-      
+
       console.log("Response structure:", {
         ok: response.ok,
         answerLength: response.answer?.length || 0,
@@ -274,6 +281,7 @@ router.post("/", async (req, res) => {
     }
   } catch (err) {
     console.error(err);
+
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -306,6 +314,7 @@ router.post("/image", upload.array('images', 5), async (req, res) => {
     const uploadedFiles = req.files || [];
 
     // Convert empty strings and string "null" to null for proper database handling
+
     if (session_id === '' || session_id === 'null' || session_id === 'undefined') session_id = null;
     if (doc_id === '' || doc_id === 'null' || doc_id === 'undefined') doc_id = null;
     if (user_email === '' || user_email === 'null' || user_email === 'undefined') user_email = null;
@@ -620,6 +629,36 @@ router.get("/test-db", async (req, res) => {
   } catch (err) {
     console.error("❌ Database test failed:", err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+
+// Audio transcription endpoint (MediaRecorder fallback)
+router.post("/transcribe", upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, error: 'No audio file uploaded' });
+    }
+
+    const filePath = req.file.path;
+    const model = process.env.TRANSCRIBE_MODEL || 'whisper-1';
+
+    let result;
+    try {
+      result = await openai.audio.transcriptions.create({
+        model,
+        file: fsSync.createReadStream(filePath),
+      });
+    } finally {
+      // Clean up temp file
+      try { await fs.unlink(filePath); } catch (e) { /* ignore */ }
+    }
+
+    const text = (result && (result.text || result?.data?.text)) || '';
+    return res.json({ ok: true, text });
+  } catch (err) {
+    console.error('Transcription error:', err);
+    return res.status(500).json({ ok: false, error: err.message || 'Transcription failed' });
   }
 });
 

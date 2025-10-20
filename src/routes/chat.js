@@ -38,7 +38,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    let { prompt, k = 6, doc_id = null, user_email = null, session_id = null } = req.body || {};
+    let { prompt, k = 6, doc_id = null, user_email = null, session_id = null, wordpress_domain = null } = req.body || {};
 
     // Convert empty strings to null for proper database handling
     if (session_id === '') session_id = null;
@@ -176,7 +176,7 @@ router.post("/", async (req, res) => {
       }
 
       // Use RAG approach with context
-      const answer = await chatWithContext(prompt, relevantHits);
+      const answer = await chatWithContext(prompt, relevantHits, [], wordpress_domain);
       console.log(`\n=== SENDING RAG RESPONSE ===`);
       console.log(`Answer length: ${answer.answer?.length || 0} characters`);
       console.log(`Sources count: ${relevantHits.length}`);
@@ -243,7 +243,7 @@ router.post("/", async (req, res) => {
 
       // Use direct OpenAI without context (now with flexible system prompt)
       console.log("📝 Using flexible system prompt for non-WordPress or low-similarity questions");
-      const answer = await chatWithContext(prompt, []);
+      const answer = await chatWithContext(prompt, [], [], wordpress_domain);
       console.log(`\n=== SENDING DIRECT OPENAI RESPONSE ===`);
       console.log(`Answer length: ${answer.answer?.length || 0} characters`);
 
@@ -310,7 +310,7 @@ router.post("/image", upload.array('images', 5), async (req, res) => {
       console.log("❌ No files uploaded or files array is empty");
     }
 
-    let { prompt = "", k = 6, doc_id = null, user_email = null, session_id = null, prompt_type = "image_text" } = req.body || {};
+    let { prompt = "", k = 6, doc_id = null, user_email = null, session_id = null, prompt_type = "image_text", wordpress_domain = null } = req.body || {};
     const uploadedFiles = req.files || [];
 
     // Convert empty strings and string "null" to null for proper database handling
@@ -486,7 +486,7 @@ router.post("/image", upload.array('images', 5), async (req, res) => {
         }
       }
 
-      const answer = await chatWithContext(prompt, relevantHits, imageUrls);
+      const answer = await chatWithContext(prompt, relevantHits, imageUrls, wordpress_domain);
       console.log(`\n=== SENDING RAG RESPONSE WITH IMAGES ===`);
       console.log(`Answer length: ${answer.answer?.length || 0} characters`);
       console.log(`Sources count: ${relevantHits.length}`);
@@ -512,7 +512,7 @@ router.post("/image", upload.array('images', 5), async (req, res) => {
       console.log(`Using direct OpenAI with ${imageUrls.length} images (no relevant database results)`);
       console.log("📝 Using flexible system prompt for image questions");
 
-      const answer = await chatWithContext(prompt, [], imageUrls);
+      const answer = await chatWithContext(prompt, [], imageUrls, wordpress_domain);
       console.log(`\n=== SENDING DIRECT OPENAI RESPONSE WITH IMAGES ===`);
       console.log(`Answer length: ${answer.answer?.length || 0} characters`);
       console.log(`User uploaded images count: ${imageUrls.length}`);

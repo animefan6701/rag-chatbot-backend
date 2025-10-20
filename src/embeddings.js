@@ -231,7 +231,7 @@ export async function embedBatch(texts = []) {
 }
 
 
-export async function chatWithContext(prompt, contextChunks = [], images = []) {
+export async function chatWithContext(prompt, contextChunks = [], images = [], wordpressDomain = null) {
     if (contextChunks.length === 0) {
         // No context provided - use direct OpenAI response
         const messages = [
@@ -291,7 +291,7 @@ export async function chatWithContext(prompt, contextChunks = [], images = []) {
         });
 
         const answer = choices[0].message.content;
-        const wordpressLinks = generateWordPressLinks(answer, null, prompt);
+        const wordpressLinks = generateWordPressLinks(answer, wordpressDomain, prompt);
 
         return {
             answer: answer + wordpressLinks,
@@ -358,7 +358,7 @@ ${context}`;
     });
 
     const answer = choices[0].message.content;
-    const wordpressLinks = generateWordPressLinks(answer, null, prompt);
+    const wordpressLinks = generateWordPressLinks(answer, wordpressDomain, prompt);
 
     return {
         answer: answer + wordpressLinks,

@@ -640,17 +640,56 @@ router.post("/transcribe", upload.single('audio'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'No audio file uploaded' });
     }
 
+    console.log('Transcription request received');
+    console.log('File info:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path
+    });
+
     const filePath = req.file.path;
     const model = process.env.TRANSCRIBE_MODEL || 'whisper-1';
 
+    // Get file extension from original filename or MIME type
+    let fileExt = '.webm';
+    if (req.file.originalname) {
+      const match = req.file.originalname.match(/\.[^.]+$/);
+      if (match) {
+        fileExt = match[0];
+      }
+    } else if (req.file.mimetype) {
+      // Map MIME types to extensions
+      const mimeToExt = {
+        'audio/webm': '.webm',
+        'audio/ogg': '.ogg',
+        'audio/wav': '.wav',
+        'audio/mpeg': '.mp3',
+        'audio/mp4': '.mp4',
+        'audio/flac': '.flac'
+      };
+      fileExt = mimeToExt[req.file.mimetype] || '.webm';
+    }
+
+    // Rename file with proper extension for OpenAI Whisper API
+    const renamedPath = filePath + fileExt;
+    try {
+      await fs.rename(filePath, renamedPath);
+    } catch (e) {
+      console.warn('Could not rename file, using original path:', e.message);
+    }
+
     let result;
     try {
+      console.log('Sending to Whisper API with file:', renamedPath);
       result = await openai.audio.transcriptions.create({
         model,
-        file: fsSync.createReadStream(filePath),
+        file: fsSync.createReadStream(renamedPath),
       });
+      console.log('Transcription result:', result);
     } finally {
       // Clean up temp file
+      try { await fs.unlink(renamedPath); } catch (e) { /* ignore */ }
       try { await fs.unlink(filePath); } catch (e) { /* ignore */ }
     }
 

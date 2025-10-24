@@ -59,14 +59,18 @@ function getWebFriendlyContentType(fileName) {
   return 'image/png'; // default
 }
 
-// Resolve Xpdf pdfimages.exe path
+// Resolve Xpdf pdfimages path (cross-platform)
 function resolvePdfImages() {
+  // Determine executable name based on platform
+  const isWindows = process.platform === 'win32';
+  const execName = isWindows ? 'pdfimages.exe' : 'pdfimages';
+
   // Prefer explicit env var
   if (process.env.XPDF_PATH) {
-    return path.join(process.env.XPDF_PATH, 'pdfimages.exe');
+    return path.join(process.env.XPDF_PATH, execName);
   }
   // Try in PATH
-  return 'pdfimages.exe';
+  return execName;
 }
 
 // Execute pdfimages command

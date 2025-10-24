@@ -128,31 +128,9 @@ async function extractPdfImages(pdfPath, documentId) {
 
     console.log(`Created temp directory: ${tempDir}`);
 
-    // Step 1: List images to get metadata
-    console.log(`\n--- Step 1: Listing images in PDF ---`);
-    let listOutput;
-    try {
-      // pdfimages -list requires: pdfimages -list <PDF-file> <dummy-root>
-      // The dummy root is required but not used for listing
-      const dummyRoot = path.join(tempDir, 'list-dummy');
-      console.log(`List command: pdfimages -list "${normalizedPdfPath}" "${dummyRoot}"`);
-      const { stdout: listOut } = await execPdfImages(['-list', normalizedPdfPath, dummyRoot]);
-      listOutput = listOut;
-      console.log(`Image list output:\n${listOut}`);
-    } catch (listError) {
-      console.log(`Warning: Could not list images (${listError.message}), proceeding with extraction...`);
-      console.log(`List error details: ${listError.stderr || listError.stdout || 'No details'}`);
-
-      // Check if this is a command syntax error
-      if (listError.code === 99 || (listError.stderr && listError.stderr.includes('Usage:'))) {
-        console.log(`📝 Command syntax error detected - this suggests invalid pdfimages options`);
-      }
-
-      listOutput = '';
-    }
-
-    // Step 2: Extract all images as PNG with page numbers in filenames
-    console.log(`\n--- Step 2: Extracting images ---`);
+    // Step 1: Extract all images as PNG with page numbers in filenames
+    // Note: Poppler's pdfimages doesn't support -list option, so we skip listing
+    console.log(`\n--- Step 1: Extracting images from PDF ---`);
     const outputPrefix = path.join(tempDir, 'img');
 
     // Use -p (page numbers in filenames) and -png (force PNG output)
@@ -160,7 +138,7 @@ async function extractPdfImages(pdfPath, documentId) {
 
     try {
       // Extract with page numbers and PNG format
-      const { stdout, stderr, noImages } = await execPdfImages(['-j', normalizedPdfPath, outputPrefix]);
+      const { stdout, stderr, noImages } = await execPdfImages(['-p', '-png', normalizedPdfPath, outputPrefix]);
       if (noImages) {
         console.log(`📝 PDF contains no extractable images (exit code 1)`);
       } else {
@@ -215,10 +193,9 @@ async function extractPdfImages(pdfPath, documentId) {
       return 0;
     }
 
-    // Step 4: Parse image metadata from list output
-    const lines = listOutput.split(/\r?\n/);
-    const headerIdx = lines.findIndex(l => /\bpage\b/i.test(l) && /\bwidth\b/i.test(l));
-    const dataLines = headerIdx >= 0 ? lines.slice(headerIdx + 1).filter(Boolean) : [];
+    // Step 2: Parse image metadata from extracted files
+    // Since Poppler's pdfimages doesn't support -list, we'll extract metadata from filenames
+    // Filename format with -p option: img-<index>-<page>.png
 
     // Step 5: Upload images to storage and save to database (following DOCX pattern)
     console.log(`\n--- Step 4: Uploading images to storage ---`);
@@ -243,11 +220,11 @@ async function extractPdfImages(pdfPath, documentId) {
 
         console.log(`  - Image index: ${imageIndex}, Page: ${pageIndex}`);
 
-        // Parse additional metadata from list output (if available)
-        const cols = (dataLines[i] || '').trim().split(/\s+/);
-        const imageType = cols[2] || null;
-        const width = Number(cols[3]) || null;
-        const height = Number(cols[4]) || null;
+        // Note: Poppler's pdfimages doesn't provide detailed metadata like Xpdf did
+        // We only have the filename and image buffer
+        const imageType = null; // Not available from Poppler
+        const width = null;     // Not available from Poppler
+        const height = null;    // Not available from Poppler
 
         // Create asset path (similar to DOCX pattern)
         const assetPath = `pdf/${documentId}/image_${i}`;

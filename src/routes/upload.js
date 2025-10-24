@@ -19,6 +19,22 @@ const execFileAsync = promisify(execFile);
 const upload = multer({ dest: 'uploads/' });
 const router = Router();
 
+// Configure multer to accept both 'file' (single) and 'files' (array) field names
+const uploadMiddleware = (req, res, next) => {
+  // Try to handle 'file' field first (single file), then 'files' (multiple files)
+  const fileField = req.headers['content-type']?.includes('multipart/form-data') ? 'file' : 'files';
+
+  // Use upload.array for flexibility - it will handle both single and multiple files
+  upload.array('file', 10)(req, res, (err) => {
+    if (err && err.code === 'LIMIT_UNEXPECTED_FILE') {
+      // If 'file' field fails, try 'files' field
+      upload.array('files', 10)(req, res, next);
+    } else {
+      next(err);
+    }
+  });
+};
+
 // Helper function to determine if we should convert image format
 function shouldConvertImage(fileName) {
   const ext = path.extname(fileName).toLowerCase();
@@ -386,7 +402,7 @@ async function extractDocxImages(docxBuffer, documentId) {
   }
 }
 
-router.post('/', upload.array('files'), async (req, res) => {
+router.post('/', uploadMiddleware, async (req, res) => {
   try {
     const documentId = uuidv4();
     const d = db();
